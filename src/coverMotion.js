@@ -77,11 +77,17 @@ function schedule() {
   if (!frame) frame = requestAnimationFrame(update)
 }
 
+// Scroll events don't bubble; capturing on the document catches the page and the track. Only those move
+// a cover: scrolling a pillar's own text (or the intro column) leaves every cover where it was.
+function onScroll(e) {
+  const t = e.target
+  if (t === document || t.hasAttribute?.('data-track')) schedule()
+}
+
 function start() {
   if (listening || !covers.size || reduced.matches) return
   listening = true
-  // Scroll events don't bubble; capturing on the document catches the page, the track and every pillar.
-  document.addEventListener('scroll', schedule, { capture: true, passive: true })
+  document.addEventListener('scroll', onScroll, { capture: true, passive: true })
   window.addEventListener('resize', schedule)
   desktop.addEventListener('change', schedule)
   schedule()
@@ -90,7 +96,7 @@ function start() {
 function stop() {
   if (!listening) return
   listening = false
-  document.removeEventListener('scroll', schedule, { capture: true })
+  document.removeEventListener('scroll', onScroll, { capture: true })
   window.removeEventListener('resize', schedule)
   desktop.removeEventListener('change', schedule)
   if (frame) cancelAnimationFrame(frame)
@@ -106,16 +112,71 @@ reduced.addEventListener('change', () => {
   else start()
 })
 
-// Registers a cover; returns the matching cleanup.
-export function trackCover(el) {
+// ---------- Word sizing ----------
+// CSS sizes each cover's word to fit from --r, the word's width per unit of font size. That ratio is
+// fixed for a given font, so it's measured once the covers mount and again whenever a word's box changes
+// (the web font replacing the fallback, a resize). Every word is read before any ratio is written, so
+// one layout serves them all.
+// Text width doesn't scale exactly with font size: sub-pixel rounding moves the measured ratio by up to
+// ~0.03%. Rewriting it each time resizes the word, which re-fires the observer, so the ratio would
+// bounce forever with a layout every frame. A ratio within RATIO_TOLERANCE of the current one is kept.
+const RATIO_TOLERANCE = 0.002
+const coverOf = new WeakMap() // word → its cover
+const unmeasured = new Set()
+const resized = 'ResizeObserver' in window ? new ResizeObserver((entries) => fit(entries.map((e) => e.target))) : null
+
+function fit(words) {
+  const ratios = []
+  for (const word of words) {
+    const cover = coverOf.get(word)
+    if (!cover) continue
+    const size = parseFloat(getComputedStyle(word).fontSize)
+    const width = word.getBoundingClientRect().width
+    if (size > 0 && width > 0) ratios.push([cover, width / size])
+  }
+  let changed = false
+  for (const [cover, ratio] of ratios) {
+    const current = parseFloat(cover.style.getPropertyValue('--r')) // NaN until first measured
+    if (Math.abs(ratio / current - 1) < RATIO_TOLERANCE) continue
+    cover.style.setProperty('--r', ratio.toFixed(4))
+    changed = true
+  }
+  // The covers may have moved with their words, so the spotlight catches up.
+  if (changed && listening) schedule()
+}
+
+// Covers mount one after another; the first queues a single measurement for all of them.
+function measureSoon(word) {
+  if (!unmeasured.size) {
+    queueMicrotask(() => {
+      const words = [...unmeasured]
+      unmeasured.clear()
+      fit(words)
+    })
+  }
+  unmeasured.add(word)
+}
+
+// Registers a cover and its word; returns the matching cleanup.
+export function trackCover(el, word) {
   covers.add(el)
   el.classList.toggle('is-live', !reduced.matches)
+  if (word) {
+    coverOf.set(word, el)
+    measureSoon(word)
+    resized?.observe(word)
+  }
   start()
   if (listening) schedule()
   return () => {
     covers.delete(el)
     el.classList.remove('is-live')
     el.style.removeProperty('--k')
+    if (word) {
+      resized?.unobserve(word)
+      unmeasured.delete(word)
+      coverOf.delete(word)
+    }
     if (!covers.size) stop()
   }
 }

@@ -172,6 +172,20 @@ function onWheel(e) {
   travel(e.deltaY * unit)
 }
 
+// The wheel handler can't be passive (it takes vertical wheels over), and the browser waits on a
+// non-passive one before every scroll, so it's only attached while the row is laid out sideways.
+function bindWheel() {
+  const el = root.value
+  if (!el) return
+  if (desktop.matches) el.addEventListener('wheel', onWheel, { passive: false })
+  else el.removeEventListener('wheel', onWheel)
+}
+
+function onLayout() {
+  bindWheel()
+  schedule()
+}
+
 // Left and right arrows step between pillars when focus isn't inside one.
 function onKey(e) {
   if (!desktop.matches || e.altKey || e.metaKey || e.ctrlKey) return
@@ -199,11 +213,11 @@ function playEntrance() {
 
 onMounted(() => {
   playEntrance()
-  root.value.addEventListener('wheel', onWheel, { passive: false })
+  bindWheel()
   window.addEventListener('keydown', onKey)
   window.addEventListener('scroll', schedule, { passive: true })
   window.addEventListener('resize', schedule)
-  desktop.addEventListener('change', schedule)
+  desktop.addEventListener('change', onLayout)
   const id = decodeURIComponent(location.hash.slice(1))
   if (id && document.getElementById(id)) requestAnimationFrame(() => scrollToSection(id, false))
   schedule()
@@ -214,7 +228,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('scroll', schedule)
   window.removeEventListener('resize', schedule)
-  desktop.removeEventListener('change', schedule)
+  desktop.removeEventListener('change', onLayout)
   if (frame) cancelAnimationFrame(frame)
   if (glide) cancelAnimationFrame(glide)
   window.clearTimeout(settleTimer)

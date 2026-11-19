@@ -10,33 +10,14 @@ const props = defineProps({
 const el = ref(null)
 const wordEl = ref(null)
 let untrack = null
-let observer = null
 
-// The word's width per unit of font size is fixed for a given font, so measuring it (again whenever
-// the word's box changes, as when the web font replaces the fallback) lets CSS size the word to fit
-// the cover at any width. Writing the same ratio back doesn't change the box, so this settles at once.
-function measure() {
-  const w = wordEl.value
-  if (!w || !el.value) return
-  const size = parseFloat(getComputedStyle(w).fontSize)
-  const width = w.getBoundingClientRect().width
-  if (!(size > 0 && width > 0)) return
-  const ratio = (width / size).toFixed(4)
-  if (el.value.style.getPropertyValue('--r') !== ratio) el.value.style.setProperty('--r', ratio)
-}
-
+// coverMotion.js measures the word (writing --r, so CSS can size it to fit the cover) and drives the
+// spotlight (--k), for every cover at once.
 onMounted(() => {
-  measure()
-  if ('ResizeObserver' in window) {
-    observer = new ResizeObserver(measure)
-    observer.observe(wordEl.value)
-  }
-  document.fonts?.ready.then(measure)
-  untrack = trackCover(el.value)
+  untrack = trackCover(el.value, wordEl.value)
 })
 
 onBeforeUnmount(() => {
-  observer?.disconnect()
   untrack?.()
 })
 
