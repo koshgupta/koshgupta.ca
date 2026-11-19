@@ -8,7 +8,12 @@ defineProps({
 
 <template>
   <article class="entry">
-    <h3 class="title">{{ entry.title }}</h3>
+    <h3 class="title">
+      <a v-if="entry.link" class="title-link" :href="entry.link.href" target="_blank" rel="noopener"
+        >{{ entry.title }}<span class="sr-only">, {{ entry.link.label }}</span><ArrowOut
+      /></a>
+      <template v-else>{{ entry.title }}</template>
+    </h3>
     <p v-if="entry.org" class="org">{{ entry.org }}</p>
     <p v-if="entry.meta" class="meta">{{ entry.meta }}</p>
 
@@ -30,10 +35,6 @@ defineProps({
     <ul v-if="entry.tags" class="tags" aria-label="Built with">
       <li v-for="tag in entry.tags" :key="tag">{{ tag }}</li>
     </ul>
-
-    <a v-if="entry.link" class="link" :href="entry.link.href" target="_blank" rel="noopener">
-      {{ entry.link.label }}<ArrowOut />
-    </a>
   </article>
 </template>
 
@@ -143,14 +144,13 @@ defineProps({
   color: var(--quiet);
 }
 
-.link {
-  display: inline-block;
-  margin-top: 20px;
-  font-weight: 600;
-  color: var(--ink);
+.title-link {
+  text-decoration: none;
 }
 
-.link:hover {
+.title-link:hover,
+.title-link:focus-visible {
+  text-decoration: underline;
   text-decoration-thickness: 2px;
 }
 

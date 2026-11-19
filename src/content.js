@@ -3,15 +3,6 @@
 export const profile = {
   name: 'Koshlender Gupta',
   role: 'Computer science student at Toronto Metropolitan University',
-  // The About card's statement: staggered lines on desktop, running text on phones.
-  about: [
-    'I like the part',
-    'of software that',
-    'meets real people:',
-    'a society’s books,',
-    'a team’s codebase,',
-    'a city’s licenses.',
-  ],
   status: 'Graduating June 2027',
   links: [
     { label: 'GitHub', href: 'https://github.com/koshgupta' },
@@ -19,16 +10,25 @@ export const profile = {
   ],
 }
 
-// Cover geometry is in container units of the cover (cqw / cqh).
-// wx: word left edge, cx / cy: circle position, cd: circle diameter.
-// dx / dy: how far the circle drifts each way from its spot as the cover scrolls through.
+// Each cover's word is sized to fit its card; the circle is the spotlight that sweeps across it.
+// circle / ink / inner: palette names for the circle, the word, and the word inside the circle.
+// y: the circle's offset below the word's midline, as a multiple of the word's size.
 export const sections = [
+  {
+    id: 'about',
+    label: 'About',
+    word: 'About',
+    cover: { y: 0.06, circle: 'ash', ink: 'mahogany', inner: 'granite' },
+    text: [
+      'I am a CS student at Toronto Metropolitan University, but in our industry you never really stop learning. I like making software that solves inconveniences, because the more time we can save on mundane tasks, the more time we can spend doing the things we love. For me, that’s spending time with my pet bird.',
+    ],
+  },
   {
     id: 'projects',
     label: 'Projects',
     word: 'Projects',
     width: 'wide',
-    cover: { wx: '-2cqw', cx: '56cqw', cy: '-14cqh', cd: '128cqh', dx: '-16cqw', dy: '8cqh', circle: 'mahogany', ink: 'mahogany', inner: 'sand' },
+    cover: { y: -0.08, circle: 'mahogany', ink: 'mahogany', inner: 'sand' },
     entries: [
       {
         title: 'S&P 500 Daily Volatility Forecasting Pipeline',
@@ -73,7 +73,7 @@ export const sections = [
     id: 'experience',
     label: 'Experience',
     word: 'Experience',
-    cover: { wx: '5cqw', cx: '-34cqh', cy: '-6cqh', cd: '112cqh', dx: '18cqw', dy: '-6cqh', circle: 'granite', ink: 'mahogany', inner: 'sand' },
+    cover: { y: 0.08, circle: 'granite', ink: 'mahogany', inner: 'sand' },
     entries: [
       {
         meta: 'May – Dec 2025',
@@ -83,14 +83,6 @@ export const sections = [
           'I worked on software asset management for the City: connecting ServiceNow to older municipal systems and building license-usage reporting that shaped renewal decisions.',
         ],
       },
-    ],
-  },
-  {
-    id: 'leadership',
-    label: 'Leadership',
-    word: 'Leadership',
-    cover: { wx: '-6cqw', cx: '34cqw', cy: '-22cqh', cd: '138cqh', dx: '-20cqw', dy: '10cqh', circle: 'ash', ink: 'mahogany', inner: 'granite' },
-    entries: [
       {
         meta: 'May 2024 – Jun 2025',
         title: 'Vice President of Finance',
@@ -105,7 +97,7 @@ export const sections = [
     id: 'education',
     label: 'Education',
     word: 'Education',
-    cover: { wx: '4cqw', cx: '66cqw', cy: '8cqh', cd: '96cqh', dx: '-26cqw', dy: '-10cqh', circle: 'charcoal', ink: 'mahogany', inner: 'sand' },
+    cover: { y: 0.1, circle: 'charcoal', ink: 'mahogany', inner: 'sand' },
     entries: [
       {
         meta: 'Sep 2022 – Jun 2027',
@@ -126,7 +118,7 @@ export const sections = [
     label: 'Skills',
     word: 'Skills',
     tone: 'granite',
-    cover: { wx: '6cqw', cx: '48cqw', cy: '-4cqh', cd: '108cqh', dx: '16cqw', dy: '-8cqh', circle: 'mahogany', ink: 'sand', inner: 'ash' },
+    cover: { y: -0.05, circle: 'mahogany', ink: 'sand', inner: 'ash' },
     groups: [
       { name: 'Languages & Frameworks', items: ['Python', 'Go', 'Java', 'JavaScript', 'Rust', 'Ruby', 'React', 'HTML', 'REST API'] },
       { name: 'ML & Data', items: ['XGBoost', 'Optuna', 'HuggingFace Transformers (FinBERT, Qwen)', 'scikit-learn', 'pandas', 'NumPy', 'Matplotlib', 'Parquet'] },

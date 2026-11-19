@@ -1,51 +1,76 @@
-// Scroll-linked motion for the pillar covers.
-// One rAF-throttled pass writes each cover's --k: its progress through the view, where 0 shows the
-// start of the word and 1 shows its end. PillarCover's CSS turns that into the word's slide and the
-// circle's drift, so the geometry stays in one place and the static composition is the fallback.
+// Scroll-linked spotlight for the pillar covers.
+// One rAF-throttled pass writes each cover's --k: 0 where you first see the cover, 1 once you have
+// scrolled to it. PillarCover's CSS slides the circle from the word's first letter (0) to its last (1);
+// without --k the circle rests centred on the word.
 
 const covers = new Set()
 const desktop = window.matchMedia('(min-width: 960px) and (min-height: 560px)')
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
 
+// A cover that starts (nearly) where it ends has nothing to scroll through, so it sweeps once on load.
+const IN_PLACE = 0.25
+const SWEEP_DELAY = 500
+const SWEEP_MS = 1500
+const sweeps = new WeakMap()
+
 let frame = 0
 let listening = false
 
-// Linear through [0, 1] so the slide tracks the scroll exactly; past either end it eases into a
-// short overshoot instead of running the word off the card.
-const OVERSHOOT = 0.14
-function soften(u) {
-  if (u < 0) return -OVERSHOOT * (1 - Math.exp(u / OVERSHOOT))
-  if (u > 1) return 1 + OVERSHOOT * (1 - Math.exp((1 - u) / OVERSHOOT))
-  return u
+const clamp01 = (n) => Math.min(1, Math.max(0, n))
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2)
+
+// Progress from where the cover first appears to where it settles, or null if it starts in place.
+// The start is wherever the cover sits with the page scrolled back to the beginning, if that's already
+// on screen, so it adapts to the screen size and works out the same after a resize or a deep link.
+// The end is its settling point, or as close as the scroll can bring it (the last pillars can't
+// reach the left edge).
+function span(from, at, end, usual) {
+  if (from - end < usual * IN_PLACE) return null
+  return clamp01((from - at) / (from - end))
 }
 
 function progress(el) {
   const r = el.getBoundingClientRect()
-  if (!r.width || !r.height) return 0.5
 
   if (desktop.matches) {
-    // Sideways row: 0 once the pillar is fully in from the right, 0.5 when it reaches the left edge.
-    // Scrolling down inside the pillar carries on toward 1 as the cover leaves the top.
+    // Sideways row: settles when the pillar's left edge reaches the left edge of the row.
     const track = el.closest('[data-track]')
-    const box = el.closest('[data-pillar-scroll]')
-    if (!track) return 0.5
+    if (!track) return null
     const t = track.getBoundingClientRect()
-    const across = (t.right - r.right) / Math.max(t.width - r.width, r.width / 2)
-    const down = box ? box.scrollTop / r.height : 0
-    return across * 0.5 + down * 0.5
+    const x = r.left - t.left
+    const x0 = x + track.scrollLeft
+    const end = Math.max(0, x0 - (track.scrollWidth - track.clientWidth))
+    return span(Math.min(t.width, x0), x, end, t.width)
   }
 
-  // Stacked pages: 0 once the cover is fully in from the bottom, 1 when it reaches the top.
-  const vh = window.innerHeight
-  return (vh - r.bottom) / Math.max(vh - r.height, r.height / 2)
+  // Stacked: starts once the word's midline is on screen, settles when the cover's top reaches the top.
+  const usual = window.innerHeight - r.height / 2
+  const y0 = r.top + window.scrollY
+  const end = Math.max(0, y0 - (document.documentElement.scrollHeight - window.innerHeight))
+  return span(Math.min(usual, y0), r.top, end, usual)
+}
+
+function sweep(el, now) {
+  if (!sweeps.has(el)) sweeps.set(el, now + SWEEP_DELAY)
+  const t = clamp01((now - sweeps.get(el)) / SWEEP_MS)
+  return { k: easeInOut(t), done: t >= 1 }
 }
 
 function update() {
   frame = 0
+  const now = performance.now()
+  let sweeping = false
   for (const el of covers) {
-    const k = soften(progress(el)).toFixed(4)
-    if (el.style.getPropertyValue('--k') !== k) el.style.setProperty('--k', k)
+    let k = progress(el)
+    if (k === null) {
+      const s = sweep(el, now)
+      k = s.k
+      if (!s.done) sweeping = true
+    }
+    const value = k.toFixed(4)
+    if (el.style.getPropertyValue('--k') !== value) el.style.setProperty('--k', value)
   }
+  if (sweeping) schedule()
 }
 
 function schedule() {
@@ -73,7 +98,10 @@ function stop() {
 }
 
 reduced.addEventListener('change', () => {
-  for (const el of covers) el.classList.toggle('is-live', !reduced.matches)
+  for (const el of covers) {
+    el.classList.toggle('is-live', !reduced.matches)
+    if (reduced.matches) el.style.removeProperty('--k')
+  }
   if (reduced.matches) stop()
   else start()
 })

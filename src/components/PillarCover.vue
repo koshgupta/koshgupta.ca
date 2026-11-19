@@ -8,21 +8,40 @@ const props = defineProps({
 })
 
 const el = ref(null)
+const wordEl = ref(null)
 let untrack = null
+let observer = null
+
+// The word's width per unit of font size is fixed for a given font, so measuring it (again whenever
+// the word's box changes, as when the web font replaces the fallback) lets CSS size the word to fit
+// the cover at any width. Writing the same ratio back doesn't change the box, so this settles at once.
+function measure() {
+  const w = wordEl.value
+  if (!w || !el.value) return
+  const size = parseFloat(getComputedStyle(w).fontSize)
+  const width = w.getBoundingClientRect().width
+  if (!(size > 0 && width > 0)) return
+  const ratio = (width / size).toFixed(4)
+  if (el.value.style.getPropertyValue('--r') !== ratio) el.value.style.setProperty('--r', ratio)
+}
 
 onMounted(() => {
+  measure()
+  if ('ResizeObserver' in window) {
+    observer = new ResizeObserver(measure)
+    observer.observe(wordEl.value)
+  }
+  document.fonts?.ready.then(measure)
   untrack = trackCover(el.value)
 })
 
-onBeforeUnmount(() => untrack?.())
+onBeforeUnmount(() => {
+  observer?.disconnect()
+  untrack?.()
+})
 
 const style = computed(() => ({
-  '--wx': props.cover.wx,
-  '--cx': props.cover.cx,
-  '--cy': props.cover.cy,
-  '--cd': props.cover.cd,
-  '--dx': props.cover.dx ?? '-14cqw',
-  '--dy': props.cover.dy ?? '0cqh',
+  '--y': props.cover.y ?? 0,
   '--circle': `var(--${props.cover.circle})`,
   '--word-ink': `var(--${props.cover.ink})`,
   '--word-inner': `var(--${props.cover.inner})`,
@@ -30,28 +49,49 @@ const style = computed(() => ({
 </script>
 
 <template>
-  <!-- Decorative: the pillar's visible label is its heading. -->
+  <!-- Decorative: the pillar's heading names the section. -->
   <div ref="el" class="cover" aria-hidden="true" :style="style">
-    <span class="word">{{ word }}</span>
+    <span ref="wordEl" class="word">{{ word }}</span>
     <span class="circle"><span class="word word--inner">{{ word }}</span></span>
   </div>
 </template>
 
 <style scoped>
+/*
+  Geometry, in the cover's container units (resolved where each property is used):
+  --fs  the word's size: as large as fits between 6cqw margins, capped at 62% of the cover's height
+  --ww  the word's width (--r is its measured width per unit of font size)
+  --wl  the word's left edge, centring it
+  --cd  the circle's diameter, the same on every cover (desktop covers share a height, stacked
+        covers share a width); --y nudges it off the word's midline, in units of the word's size
+*/
 .cover {
+  --fs: min(62cqh, 88cqw / var(--r, 5));
+  --ww: calc(var(--fs) * var(--r, 5));
+  --wl: calc((100cqw - var(--ww)) / 2);
+  --cd: 66cqh;
+
   position: relative;
   container-type: size;
-  height: var(--cover-h, clamp(200px, 38dvh, 380px));
+  height: clamp(200px, 38dvh, 380px);
   overflow: clip;
   flex: none;
 }
 
+/* Stacked, each cover hugs its word (the cards sit apart, so heights needn't match). */
+@media not all and (min-width: 960px) and (min-height: 560px) {
+  .cover {
+    --cd: 35cqw;
+    height: min(clamp(200px, 38dvh, 380px), max(160px, 1.76 * (100vw - 32px) / var(--r, 5)));
+  }
+}
+
 .word {
   position: absolute;
-  left: var(--wx);
+  left: var(--wl);
   top: 50cqh;
   transform: translateY(-52%);
-  font-size: 62cqh;
+  font-size: var(--fs);
   font-stretch: 125%;
   font-weight: 560;
   letter-spacing: -0.04em;
@@ -61,10 +101,11 @@ const style = computed(() => ({
   user-select: none;
 }
 
+/* At rest the circle sits centred on the word, nudged off its midline by --y. */
 .circle {
   position: absolute;
-  left: var(--cx);
-  top: var(--cy);
+  left: calc(var(--wl) + var(--ww) / 2 - var(--cd) / 2);
+  top: calc(50cqh + var(--y) * var(--fs) - var(--cd) / 2);
   width: var(--cd);
   height: var(--cd);
   border-radius: 50%;
@@ -74,36 +115,23 @@ const style = computed(() => ({
 
 /* The same word, clipped by the circle, so the ink flips where they cross. */
 .word--inner {
-  left: calc(var(--wx) - var(--cx));
-  top: calc(50cqh - var(--cy));
+  left: calc(var(--cd) / 2 - var(--ww) / 2);
+  top: calc(var(--cd) / 2 - var(--y) * var(--fs));
   color: var(--word-inner);
 }
 
 /*
-  Scroll-linked travel. coverMotion.js writes --k: 0 shows the start of the word at its designed
-  offset, 1 slides it until the end sits the same distance from the right edge (the 100% is the
-  word's own width, so any length works). The circle drifts along --dx / --dy, passing
-  its designed spot at the midpoint, and the clipped word counter-moves to stay registered.
+  Spotlight: coverMotion.js writes --k as the cover scrolls into place, sliding the circle from the
+  word's first letter (0) to its last (1). The clipped word counter-moves to stay registered.
 */
 @media (prefers-reduced-motion: no-preference) {
-  .cover.is-live {
-    --slide: calc(var(--k, 0) * (100cqw - 2 * var(--wx) - 100%));
-    --drift-x: calc((var(--k, 0) - 0.5) * 2 * var(--dx));
-    --drift-y: calc((var(--k, 0) - 0.5) * 2 * var(--dy));
-  }
-
-  .is-live .word {
-    translate: var(--slide) 0;
-    will-change: translate;
-  }
-
   .is-live .circle {
-    translate: var(--drift-x) var(--drift-y);
+    translate: calc((var(--k, 0.5) - 0.5) * var(--ww)) 0;
     will-change: translate;
   }
 
   .is-live .word--inner {
-    translate: calc(var(--slide) - var(--drift-x)) calc(-1 * var(--drift-y));
+    translate: calc((0.5 - var(--k, 0.5)) * var(--ww)) 0;
   }
 }
 </style>
